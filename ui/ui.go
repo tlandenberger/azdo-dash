@@ -1,20 +1,31 @@
 package ui
 
 import (
+	"azdo-dash/config"
+	"azdo-dash/context"
 	"fmt"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
+	"os"
+	"strings"
+	"time"
 )
 
 type ErrMsg error
 
 type Model struct {
-	spinner  spinner.Model
-	quitting bool
-	err      error
-	lastKey  string
+	items      []string
+	quitting   bool
+	err        error
+	configPath string
+	ctx        context.ProgramContext
+}
+
+type initMsg struct {
+	Config config.Config
 }
 
 var quitKeys = key.NewBinding(
@@ -22,26 +33,68 @@ var quitKeys = key.NewBinding(
 	key.WithHelp("", "press q to quit"),
 )
 
-func NewModel() Model {
+func NewModel(configPath string) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	return Model{spinner: s}
+
+	m := Model{
+		configPath: configPath,
+	}
+	m.ctx = context.ProgramContext{
+		ConfigPath: configPath,
+	}
+
+	return m
 }
 
-/*func (m Model) Init() tea.Cmd {
-	return m.spinner.Tick
-}*/
+func (m *Model) initScreen() tea.Msg {
+	showError := func(err error) {
+		styles := log.DefaultStyles()
+		styles.Key = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("1")).
+			Bold(true)
+		styles.Separator = lipgloss.NewStyle()
+
+		logger := log.New(os.Stderr)
+		logger.SetStyles(styles)
+		logger.SetTimeFormat(time.RFC3339)
+		logger.SetReportTimestamp(true)
+		logger.SetPrefix("Reading config file")
+		logger.SetReportCaller(true)
+
+		logger.
+			Fatal(
+				"failed parsing config file",
+				"location",
+				m.configPath,
+				"err",
+				err,
+			)
+	}
+
+	cfg, err := config.ParseConfig(m.ctx.ConfigPath)
+	if err != nil {
+		showError(err)
+		return initMsg{Config: cfg}
+	}
+
+	return initMsg{Config: cfg}
+}
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.EnterAltScreen, m.spinner.Tick)
+	return tea.Batch(m.initScreen, tea.EnterAltScreen)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 
+	case initMsg:
+		m.ctx.Config = &msg.Config
+
 	case tea.KeyMsg:
-		m.lastKey = msg.String()
 		if key.Matches(msg, quitKeys) {
 			m.quitting = true
 			return m, tea.Quit
@@ -54,22 +107,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	default:
 		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	}
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
+	if m.ctx.Config == nil {
+		return "Reading config...\n"
+	}
 	if m.err != nil {
 		return m.err.Error()
 	}
-	str := fmt.Sprintf("\n\n   %s Loading forever... %s\n\n", m.spinner.View(), quitKeys.Help().Desc)
 	if m.quitting {
-		return str + "\n"
+		return ""
 	}
 
-	if m.lastKey != "" {
-		str += fmt.Sprintf("\n\n   Last Key Pressed: %s\n", m.lastKey)
+	str := strings.Builder{}
+	str.WriteString("Project Ids:\n\n")
+	for idx, item := range m.ctx.Config.ProjectIds {
+		str.WriteString(fmt.Sprintf("%d. %s\n", idx+1, item))
 	}
-	return str
+	str.WriteString("\n\nRepo Ids:\n\n")
+	for idx, item := range m.ctx.Config.RepoIds {
+		str.WriteString(fmt.Sprintf("%d. %s\n", idx+1, item))
+	}
+
+	return str.String()
 }

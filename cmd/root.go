@@ -26,6 +26,7 @@ var (
 var (
 	cfgFile string
 
+	// TODO: Edit help menu
 	rootCmd = &cobra.Command{
 		Use:     "gh dash",
 		Short:   "A gh extension that shows a configurable dashboard of pull requests and issues.",
@@ -58,7 +59,7 @@ func createModel(configPath string, debug bool) (ui.Model, *os.File) {
 		}
 	}
 
-	return ui.NewModel(), loggerFile
+	return ui.NewModel(configPath), loggerFile
 }
 
 func buildVersion(version, commit, date, builtBy string) string {
@@ -117,7 +118,7 @@ func init() {
 		// see https://github.com/charmbracelet/lipgloss/issues/73
 		lipgloss.SetHasDarkBackground(termenv.HasDarkBackground())
 
-		// todo: markdown not yet implemented
+		// TODO: markdown not yet implemented
 		//markdown.InitializeMarkdownStyle(termenv.HasDarkBackground())
 
 		model, logger := createModel(cfgFile, debug)
