@@ -2,8 +2,10 @@ package ui
 
 import (
 	"azdo-dash/config"
+	"azdo-dash/constants"
 	"azdo-dash/context"
-	"fmt"
+	"azdo-dash/ui/prssection"
+	"azdo-dash/ui/section"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,14 +18,6 @@ import (
 
 type ErrMsg error
 
-type Model struct {
-	items      []string
-	quitting   bool
-	err        error
-	configPath string
-	ctx        context.ProgramContext
-}
-
 type initMsg struct {
 	Config config.Config
 }
@@ -33,16 +27,33 @@ var quitKeys = key.NewBinding(
 	key.WithHelp("", "press q to quit"),
 )
 
+type Model struct {
+	items       []string
+	quitting    bool
+	err         error
+	configPath  string
+	ctx         context.ProgramContext
+	prSection   section.Section
+	tasks       map[string]context.Task
+	taskSpinner spinner.Model
+}
+
 func NewModel(configPath string) Model {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	taskSpinner := spinner.Model{Spinner: spinner.Dot}
 
 	m := Model{
-		configPath: configPath,
+		configPath:  configPath,
+		tasks:       map[string]context.Task{},
+		taskSpinner: taskSpinner,
 	}
 	m.ctx = context.ProgramContext{
 		ConfigPath: configPath,
+		StartTask: func(task context.Task) tea.Cmd {
+			log.Debug("Starting task", "id", task.Id)
+			task.StartTime = time.Now()
+			m.tasks[task.Id] = task
+			return m.taskSpinner.Tick
+		},
 	}
 
 	return m
@@ -87,12 +98,40 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
 
 	switch msg := msg.(type) {
 
 	case initMsg:
 		m.ctx.Config = &msg.Config
+
+		prSection, fetchSectionsCmd := m.fetchAllViewSections()
+		m.setCurrentViewSections(prSection)
+		cmds = append(cmds, fetchSectionsCmd)
+
+	case constants.TaskFinishedMsg:
+		task, ok := m.tasks[msg.TaskId]
+		if ok {
+			log.Debug("Task finished", "id", task.Id)
+			if msg.Err != nil {
+				log.Error("Task finished with error", "id", task.Id, "err", msg.Err)
+				task.State = context.TaskError
+				task.Error = msg.Err
+			} else {
+				task.State = context.TaskFinished
+			}
+			now := time.Now()
+			task.FinishedTime = &now
+			m.tasks[msg.TaskId] = task
+			cmd = tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+				return constants.ClearTaskMsg{TaskId: msg.TaskId}
+			})
+
+			m.updateSection(msg.SectionId, msg.SectionType, msg.Msg)
+		}
 
 	case tea.KeyMsg:
 		if key.Matches(msg, quitKeys) {
@@ -110,6 +149,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	sectionCmd := m.updateCurrentSection(msg)
+	cmds = append(cmds, cmd, sectionCmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -117,22 +158,45 @@ func (m Model) View() string {
 	if m.ctx.Config == nil {
 		return "Reading config...\n"
 	}
-	if m.err != nil {
-		return m.err.Error()
-	}
-	if m.quitting {
-		return ""
-	}
 
-	str := strings.Builder{}
-	str.WriteString("Project Ids:\n\n")
-	for idx, item := range m.ctx.Config.ProjectIds {
-		str.WriteString(fmt.Sprintf("%d. %s\n", idx+1, item))
+	s := strings.Builder{}
+	s.WriteString("\n")
+	currSection := m.getCurrSection()
+	mainContent := ""
+	if currSection != nil {
+		mainContent = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			m.getCurrSection().View(),
+		)
+	} else {
+		mainContent = "No sections defined..."
 	}
-	str.WriteString("\n\nRepo Ids:\n\n")
-	for idx, item := range m.ctx.Config.RepoIds {
-		str.WriteString(fmt.Sprintf("%d. %s\n", idx+1, item))
-	}
+	s.WriteString(mainContent)
+	s.WriteString("\n")
 
-	return str.String()
+	return s.String()
+}
+
+func (m *Model) setCurrentViewSections(newSections []section.Section) {
+	m.prSection = newSections[0]
+}
+
+func (m *Model) updateCurrentSection(msg tea.Msg) (cmd tea.Cmd) {
+	section := m.getCurrSection()
+	if section == nil {
+		return nil
+	}
+	return m.updateSection(section.GetId(), section.GetType(), msg)
+}
+
+func (m *Model) fetchAllViewSections() ([]section.Section, tea.Cmd) {
+	return prssection.FetchAllSections(m.ctx)
+}
+
+func (m *Model) updateSection(id int, sType string, msg tea.Msg) (cmd tea.Cmd) {
+	var updatedSection section.Section
+	updatedSection, cmd = m.prSection.Update(msg)
+	m.prSection = updatedSection
+
+	return cmd
 }

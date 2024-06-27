@@ -20,8 +20,14 @@ const DEFAULT_XDG_CONFIG_DIRNAME = ".config"
 var validate *validator.Validate
 
 type Config struct {
-	ProjectIds []string `yaml:"projectIds"`
-	RepoIds    []string `yaml:"repoIds"`
+	OrgName             string           `yaml:"org_name" validate:"required"`
+	Projects            []ConfigProjects `yaml:"projects"`
+	PersonalAccessToken string           `yaml:"personal_access_token" validate:"required"`
+}
+
+type ConfigProjects struct {
+	Id      string
+	RepoIds []string `yaml:"repo_ids"`
 }
 
 type configError struct {
@@ -34,8 +40,9 @@ type ConfigParser struct{}
 
 func (parser ConfigParser) getDefaultConfig() Config {
 	return Config{
-		ProjectIds: []string{},
-		RepoIds:    []string{},
+		OrgName:             "",
+		Projects:            []ConfigProjects{},
+		PersonalAccessToken: "",
 	}
 }
 
