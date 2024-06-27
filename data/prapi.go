@@ -10,7 +10,12 @@ import (
 
 type PullRequestData struct {
 	ID                int
+	Title             string
 	Status            string
+	MergeStatus       string
+	SourceBranch      string
+	CreatedBy         string
+	IsDraft           bool
 	RepositoryName    string
 	RepositoryID      string
 	RequiredReviewers []string
@@ -36,13 +41,24 @@ type FetchPRResponse struct {
 type PullRequestResponse struct {
 	Repository    RepositoryResponse `json:"repository"`
 	PullRequestID int                `json:"pullRequestId"`
+	Title         string             `json:"title"`
 	Status        string             `json:"status"`
+	IsDraft       bool               `json:"isDraft"`
+	CreatedBy     UserResponse       `json:"createdBy"`
 	Reviewers     []ReviewerResponse `json:"reviewers"`
+	SourceRefName string             `json:"sourceRefName"`
+	TargetRefName string             `json:"targetRefName"`
+	MergeStatus   string             `json:"mergeStatus"`
 }
 
 type RepositoryResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type UserResponse struct {
+	DisplayName string `json:"displayName"`
+	UniqueName  string `json:"uniqueName"`
 }
 
 type ReviewerResponse struct {
@@ -84,10 +100,15 @@ func getPullRequestData(response *FetchPRResponse) []PullRequestData {
 
 		result = append(result, PullRequestData{
 			ID:                prResponse.PullRequestID,
+			Title:             prResponse.Title,
+			CreatedBy:         prResponse.CreatedBy.DisplayName,
 			Status:            prResponse.Status,
+			MergeStatus:       prResponse.MergeStatus,
+			IsDraft:           prResponse.IsDraft,
 			RepositoryID:      prResponse.Repository.ID,
 			RepositoryName:    prResponse.Repository.Name,
 			RequiredReviewers: requiredReviewers,
+			SourceBranch:      prResponse.SourceRefName,
 		})
 	}
 

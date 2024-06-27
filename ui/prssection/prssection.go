@@ -7,7 +7,7 @@ import (
 	"azdo-dash/ui/section"
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
-	"strconv"
+	"github.com/charmbracelet/lipgloss"
 	"strings"
 	"time"
 )
@@ -59,10 +59,71 @@ func (m Model) Update(msg tea.Msg) (section.Section, tea.Cmd) {
 	return &m, tea.Batch(cmd)
 }
 
+var (
+	headerStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	rowStyle          = lipgloss.NewStyle()
+	columnStyle       = lipgloss.NewStyle().Width(22).PaddingRight(2)
+	statusColumnStyle = lipgloss.NewStyle().Width(10).PaddingRight(2).MaxWidth(10)
+	boolColumnStyle   = lipgloss.NewStyle().Width(10).PaddingRight(2).MaxWidth(10)
+	statusActive      = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("●")
+	statusCompleted   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render("●")
+	statusDraft       = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("●")
+	checkMark         = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓")
+	crossMark         = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("✗")
+)
+
+func truncateString(str string, maxWidth int) string {
+	if len(str) > maxWidth {
+		if maxWidth > 3 {
+			return str[:maxWidth-3] + "..."
+		}
+		return str[:maxWidth]
+	}
+	return str
+}
+
+func formatStatus(status string) string {
+	switch status {
+	case "active":
+		return statusActive
+	case "completed":
+		return statusCompleted
+	case "draft":
+		return statusDraft
+	default:
+		return status
+	}
+}
+
+func formatBool(value bool) string {
+	if value {
+		return checkMark
+	}
+	return crossMark
+}
+
+func removePrefix(refName string) string {
+	return strings.TrimPrefix(refName, "refs/heads/")
+}
+
 func (m Model) View() string {
 	s := strings.Builder{}
 
-	s.WriteString("PR LIST:")
+	headers := []string{"Repository", "Title", "CreatedBy", "Status", "Required", "SourceBranch", "IsDraft"}
+	for _, header := range headers {
+		switch header {
+		case "Status", "IsDraft":
+			if header == "Status" {
+				s.WriteString(headerStyle.Render(statusColumnStyle.Render(header)))
+			} else {
+				s.WriteString(headerStyle.Render(boolColumnStyle.Render(header)))
+			}
+		default:
+			s.WriteString(headerStyle.Render(columnStyle.Render(header)))
+		}
+	}
+	s.WriteString("\n")
+
 	for _, pr := range m.Prs {
 
 		required := false
@@ -72,7 +133,27 @@ func (m Model) View() string {
 			}
 		}
 
-		s.WriteString("\n" + strconv.Itoa(pr.ID) + "\t" + pr.Status + "\t" + strconv.FormatBool(required) + "\t" + pr.RepositoryName)
+		row := []string{
+			pr.RepositoryName,
+			pr.Title,
+			pr.CreatedBy,
+			formatStatus(pr.Status),
+			formatBool(required),
+			removePrefix(pr.SourceBranch),
+			formatBool(pr.IsDraft),
+		}
+
+		for i, col := range row {
+			switch headers[i] {
+			case "Status":
+				s.WriteString(rowStyle.Render(statusColumnStyle.Render(col)))
+			case "IsDraft":
+				s.WriteString(rowStyle.Render(boolColumnStyle.Render(col)))
+			default:
+				s.WriteString(rowStyle.Render(columnStyle.Render(truncateString(col, 20))))
+			}
+		}
+		s.WriteString("\n")
 	}
 
 	return s.String()
