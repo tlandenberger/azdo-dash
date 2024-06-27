@@ -63,8 +63,16 @@ func (m Model) View() string {
 	s := strings.Builder{}
 
 	s.WriteString("PR LIST:")
-	for index, pr := range m.Prs {
-		s.WriteString("\nPR #" + strconv.Itoa(index+1) + ":" + strconv.Itoa(pr.ID) + " - " + pr.Status)
+	for _, pr := range m.Prs {
+
+		required := false
+		for _, reviewer := range pr.RequiredReviewers {
+			if reviewer == "Tobias Landenberger" {
+				required = true
+			}
+		}
+
+		s.WriteString("\n" + strconv.Itoa(pr.ID) + "\t" + pr.Status + "\t" + strconv.FormatBool(required) + "\t" + pr.RepositoryName)
 	}
 
 	return s.String()

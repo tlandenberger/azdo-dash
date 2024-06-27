@@ -9,10 +9,11 @@ import (
 )
 
 type PullRequestData struct {
-	ID             int
-	Status         string
-	RepositoryName string
-	RepositoryID   string
+	ID                int
+	Status            string
+	RepositoryName    string
+	RepositoryID      string
+	RequiredReviewers []string
 }
 
 type FetchPRRequest struct {
@@ -36,11 +37,20 @@ type PullRequestResponse struct {
 	Repository    RepositoryResponse `json:"repository"`
 	PullRequestID int                `json:"pullRequestId"`
 	Status        string             `json:"status"`
+	Reviewers     []ReviewerResponse `json:"reviewers"`
 }
 
 type RepositoryResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type ReviewerResponse struct {
+	DisplayName string `json:"displayName"`
+	UniqueName  string `json:"uniqueName"`
+	Vote        int    `json:"vote"`
+	HasDeclined bool   `json:"hasDeclined"`
+	IsRequired  bool   `json:"isRequired"`
 }
 
 func FetchPullRequests(configs []FetchPRRequest) (PullRequests, error) {
@@ -65,11 +75,19 @@ func getPullRequestData(response *FetchPRResponse) []PullRequestData {
 	result := make([]PullRequestData, 0)
 
 	for _, prResponse := range response.Value {
+		requiredReviewers := make([]string, 0)
+		for _, reviewer := range prResponse.Reviewers {
+			if reviewer.IsRequired {
+				requiredReviewers = append(requiredReviewers, reviewer.DisplayName)
+			}
+		}
+
 		result = append(result, PullRequestData{
-			ID:             prResponse.PullRequestID,
-			Status:         prResponse.Status,
-			RepositoryID:   prResponse.Repository.ID,
-			RepositoryName: prResponse.Repository.Name,
+			ID:                prResponse.PullRequestID,
+			Status:            prResponse.Status,
+			RepositoryID:      prResponse.Repository.ID,
+			RepositoryName:    prResponse.Repository.Name,
+			RequiredReviewers: requiredReviewers,
 		})
 	}
 
