@@ -60,16 +60,20 @@ func (m Model) Update(msg tea.Msg) (section.Section, tea.Cmd) {
 }
 
 var (
-	headerStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	rowStyle          = lipgloss.NewStyle()
-	columnStyle       = lipgloss.NewStyle().Width(22).PaddingRight(2)
-	statusColumnStyle = lipgloss.NewStyle().Width(10).PaddingRight(2).MaxWidth(10)
-	boolColumnStyle   = lipgloss.NewStyle().Width(10).PaddingRight(2).MaxWidth(10)
-	statusActive      = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("●")
-	statusCompleted   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render("●")
-	statusDraft       = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("●")
-	checkMark         = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓")
-	crossMark         = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("✗")
+	headerStyle             = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	rowStyle                = lipgloss.NewStyle()
+	columnStyle             = lipgloss.NewStyle().Width(22).PaddingRight(2)
+	smallColumnStyle        = lipgloss.NewStyle().Width(10).PaddingRight(2).MaxWidth(10).AlignHorizontal(lipgloss.Center)
+	statusActive            = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("●")
+	statusCompleted         = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Render("●")
+	statusDraft             = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("●")
+	checkMark               = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓")
+	crossMark               = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("✗")
+	noVote                  = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render("")
+	approved                = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓")
+	approvedWithSuggestions = lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("✓✍")
+	waitForAuthor           = lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Render("⌛")
+	rejected                = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("✗")
 )
 
 func truncateString(str string, maxWidth int) string {
@@ -95,6 +99,23 @@ func formatStatus(status string) string {
 	}
 }
 
+func formatVote(vote int) string {
+	switch vote {
+	case 0:
+		return noVote
+	case 10:
+		return approved
+	case 5:
+		return approvedWithSuggestions
+	case -5:
+		return waitForAuthor
+	case -10:
+		return rejected
+	default:
+		return noVote
+	}
+}
+
 func formatBool(value bool) string {
 	if value {
 		return checkMark
@@ -109,15 +130,11 @@ func removePrefix(refName string) string {
 func (m Model) View() string {
 	s := strings.Builder{}
 
-	headers := []string{"Repository", "Title", "CreatedBy", "Status", "Required", "SourceBranch", "IsDraft"}
+	headers := []string{"Repository", "Title", "CreatedBy", "Status", "Required", "Vote", "SourceBranch", "IsDraft"}
 	for _, header := range headers {
 		switch header {
-		case "Status", "IsDraft":
-			if header == "Status" {
-				s.WriteString(headerStyle.Render(statusColumnStyle.Render(header)))
-			} else {
-				s.WriteString(headerStyle.Render(boolColumnStyle.Render(header)))
-			}
+		case "Status", "IsDraft", "Vote", "Required":
+			s.WriteString(headerStyle.Render(smallColumnStyle.Render(header)))
 		default:
 			s.WriteString(headerStyle.Render(columnStyle.Render(header)))
 		}
@@ -126,29 +143,21 @@ func (m Model) View() string {
 
 	for _, pr := range m.Prs {
 
-		required := false
-		for _, reviewer := range pr.RequiredReviewers {
-			if reviewer == "Tobias Landenberger" {
-				required = true
-			}
-		}
-
 		row := []string{
 			pr.RepositoryName,
 			pr.Title,
 			pr.CreatedBy,
 			formatStatus(pr.Status),
-			formatBool(required),
+			formatBool(pr.IsRequiredReviewer),
+			formatVote(pr.Vote),
 			removePrefix(pr.SourceBranch),
 			formatBool(pr.IsDraft),
 		}
 
 		for i, col := range row {
 			switch headers[i] {
-			case "Status":
-				s.WriteString(rowStyle.Render(statusColumnStyle.Render(col)))
-			case "IsDraft":
-				s.WriteString(rowStyle.Render(boolColumnStyle.Render(col)))
+			case "Status", "Required", "Vote", "IsDraft":
+				s.WriteString(rowStyle.Render(smallColumnStyle.Render(col)))
 			default:
 				s.WriteString(rowStyle.Render(columnStyle.Render(truncateString(col, 20))))
 			}

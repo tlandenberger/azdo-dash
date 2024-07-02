@@ -9,16 +9,17 @@ import (
 )
 
 type PullRequestData struct {
-	ID                int
-	Title             string
-	Status            string
-	MergeStatus       string
-	SourceBranch      string
-	CreatedBy         string
-	IsDraft           bool
-	RepositoryName    string
-	RepositoryID      string
-	RequiredReviewers []string
+	ID                 int
+	Title              string
+	Status             string
+	MergeStatus        string
+	SourceBranch       string
+	CreatedBy          string
+	IsDraft            bool
+	RepositoryName     string
+	RepositoryID       string
+	IsRequiredReviewer bool
+	Vote               int
 }
 
 type FetchPRRequest struct {
@@ -91,24 +92,34 @@ func getPullRequestData(response *FetchPRResponse) []PullRequestData {
 	result := make([]PullRequestData, 0)
 
 	for _, prResponse := range response.Value {
-		requiredReviewers := make([]string, 0)
+
+		var userReviewer *ReviewerResponse = nil
 		for _, reviewer := range prResponse.Reviewers {
-			if reviewer.IsRequired {
-				requiredReviewers = append(requiredReviewers, reviewer.DisplayName)
+			if reviewer.DisplayName == "Tobias Landenberger" {
+				userReviewer = &reviewer
+				break
 			}
 		}
 
+		vote := 0
+		isRequiredReviewer := false
+		if userReviewer != nil {
+			vote = userReviewer.Vote
+			isRequiredReviewer = userReviewer.IsRequired
+		}
+
 		result = append(result, PullRequestData{
-			ID:                prResponse.PullRequestID,
-			Title:             prResponse.Title,
-			CreatedBy:         prResponse.CreatedBy.DisplayName,
-			Status:            prResponse.Status,
-			MergeStatus:       prResponse.MergeStatus,
-			IsDraft:           prResponse.IsDraft,
-			RepositoryID:      prResponse.Repository.ID,
-			RepositoryName:    prResponse.Repository.Name,
-			RequiredReviewers: requiredReviewers,
-			SourceBranch:      prResponse.SourceRefName,
+			ID:                 prResponse.PullRequestID,
+			Title:              prResponse.Title,
+			CreatedBy:          prResponse.CreatedBy.DisplayName,
+			Status:             prResponse.Status,
+			MergeStatus:        prResponse.MergeStatus,
+			IsDraft:            prResponse.IsDraft,
+			RepositoryID:       prResponse.Repository.ID,
+			RepositoryName:     prResponse.Repository.Name,
+			IsRequiredReviewer: isRequiredReviewer,
+			SourceBranch:       prResponse.SourceRefName,
+			Vote:               vote,
 		})
 	}
 
